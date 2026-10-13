@@ -1,0 +1,8 @@
+/build/
+/tests/__pycache__/
+/disks/**/*.img
+/disks/**/*.Dsk
+/disks/**/*.iso
+/disks/**/*.dat
+/disks/**/*.zip
+/disks/**/*.repair.txt
