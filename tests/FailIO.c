@@ -15,6 +15,18 @@ static int selected(int fd)
            && image.st_dev == current.st_dev && image.st_ino == current.st_ino;
 }
 
+ssize_t pread(int fd, void *data, size_t size, off_t offset)
+{
+    static ssize_t (*real_read)(int, void *, size_t, off_t);
+    if (!real_read) *(void **)&real_read = dlsym(RTLD_NEXT, "pread64");
+    const char *fault = getenv("OBERON_TEST_READ_OFFSET");
+    if (fault && selected(fd) && offset >= (off_t)strtoll(fault, NULL, 10)) {
+        errno = EIO;
+        return -1;
+    }
+    return real_read(fd, data, size, offset);
+}
+
 ssize_t pwrite(int fd, const void *data, size_t size, off_t offset)
 {
     static ssize_t (*real_write)(int, const void *, size_t, off_t);

@@ -34,6 +34,9 @@ def mounted(image, *options, env=None, expected_exit=0):
     directory = Path(tempfile.mkdtemp(prefix="mount-", dir=ROOT / "build"))
     mountpoint = directory / "mnt"
     mountpoint.mkdir()
+    cache = os.environ.get("OBERON_TEST_CACHE_MIB")
+    if cache is not None and "--cache-mib" not in options:
+        options = ("--cache-mib", cache, *options)
     process = subprocess.Popen([str(ROOT / "build/oberon-fuse"), str(image), str(mountpoint), *map(str, options)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     completed = False
     try:

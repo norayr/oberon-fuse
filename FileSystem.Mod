@@ -65,9 +65,9 @@ MODULE FileSystem;
     RETURN res
   END Open;
 
-  PROCEDURE OpenMount*(path: ARRAY OF CHAR; kind: INTEGER; root: LONGINT;
-                       device, writable, salvage: BOOLEAN; offset: INTEGER;
-                       VAR v: DiskTypes.Volume): INTEGER;
+  PROCEDURE OpenCachedMount*(path: ARRAY OF CHAR; kind: INTEGER; root: LONGINT;
+                            device, writable, salvage: BOOLEAN; offset, cacheMiB: INTEGER;
+                            VAR v: DiskTypes.Volume): INTEGER;
     VAR res, ignored: INTEGER; e: DiskTypes.Entry;
   BEGIN
     v.error := "opening volume"; Diagnostics.Clear(v);
@@ -76,6 +76,8 @@ MODULE FileSystem;
     ELSIF writable THEN res := BlockIO.OpenUpdate(path, v.image)
     ELSE res := BlockIO.Open(path, v.image) END;
     IF res # 0 THEN RETURN res END;
+    res := BlockIO.ConfigureCache(v.image, cacheMiB);
+    IF res # 0 THEN ignored := BlockIO.Close(v.image); RETURN res END;
     res := Scan(v, kind, root, salvage);
     v.utcOffset := offset; e := v.first;
     WHILE e # NIL DO
@@ -88,7 +90,12 @@ MODULE FileSystem;
     END;
     IF res # 0 THEN ignored := BlockIO.Close(v.image) END;
     RETURN res
-  END OpenMount;
+  END OpenCachedMount;
+
+  PROCEDURE OpenMount*(path: ARRAY OF CHAR; kind: INTEGER; root: LONGINT;
+                       device, writable, salvage: BOOLEAN; offset: INTEGER;
+                       VAR v: DiskTypes.Volume): INTEGER;
+  BEGIN RETURN OpenCachedMount(path, kind, root, device, writable, salvage, offset, 0, v) END OpenMount;
 
   PROCEDURE Find*(VAR v: DiskTypes.Volume; name: ARRAY OF CHAR): DiskTypes.Entry;
     VAR e: DiskTypes.Entry;

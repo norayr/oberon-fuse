@@ -145,14 +145,14 @@ MODULE Fuse;
   END Directory;
 
   PROCEDURE Run;
-    VAR path, mountpoint: ARRAY 1024 OF CHAR; kind, res, closed, offset: INTEGER;
+    VAR path, mountpoint: ARRAY 1024 OF CHAR; kind, res, closed, offset, cacheMiB: INTEGER;
       root: LONGINT; salvage, writable, device: BOOLEAN; h: Handle;
   BEGIN
-    IF (Modules.ArgCount < 3) OR ~CommandLine.MountOptions(3, kind, root, salvage, writable, device, offset) THEN
-      Host.Error("usage: oberon-fuse IMAGE MOUNTPOINT [--rw|--salvage] [--device] [--utc-offset MINUTES] [FORMAT [ROOT-OFFSET]]"); Host.Exit(2)
+    IF (Modules.ArgCount < 3) OR ~CommandLine.MountOptions(3, kind, root, salvage, writable, device, offset, cacheMiB) THEN
+      Host.Error("usage: oberon-fuse IMAGE MOUNTPOINT [--rw|--salvage] [--device] [--cache-mib 0..256] [--utc-offset MINUTES] [FORMAT [ROOT-OFFSET]]"); Host.Exit(2)
     END;
     Modules.GetArg(1, path); Modules.GetArg(2, mountpoint);
-    res := FileSystem.OpenMount(path, kind, root, device, writable, salvage, offset, volume);
+    res := FileSystem.OpenCachedMount(path, kind, root, device, writable, salvage, offset, cacheMiB, volume);
     IF res # 0 THEN Host.Report(volume.error, res); Host.Exit(1) END;
     IF salvage & (volume.issueCount > 0) THEN Host.Error("salvage mount: unusable files excluded; run oberon-image check for details") END;
     IF writable THEN Host.Error("writable mount: use a working copy; unmount before removal; no power-loss atomicity") END;

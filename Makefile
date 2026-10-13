@@ -14,7 +14,7 @@ FUSE_LIBS = $(shell $(PKG_CONFIG) --libs fuse3)
 PROJECT_CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -D_FILE_OFFSET_BITS=64 -I. -Itests -I"$(VOC_HOME)/C/include"
 PROJECT_CFLAGS = -std=c11 -Wall -Wextra
 VOC_FLAGS = -OC -rsS
-MODULES = Host BlockIO DiskBytes WriteBitmap DiskTypes DiskTime ProjectFS NatFS CeresFS AosFS Formats BlockSet Diagnostics AllocationMap OberonBTree AllocationCache DetectFS FSCheck BTreeRebuild FSWrite FileSystem ReportWriter FSReports FSRepair ImageCreate CommandLine FuseABI
+MODULES = Host ReadCache BlockIO DiskBytes WriteBitmap DiskTypes DiskTime ProjectFS NatFS CeresFS AosFS Formats BlockSet Diagnostics AllocationMap OberonBTree AllocationCache DetectFS FSCheck BTreeRebuild FSWrite FileSystem ReportWriter FSReports FSRepair ImageCreate CommandLine FuseABI
 CORE_OBJECTS = $(addprefix build/,$(addsuffix .o,$(filter-out FuseABI,$(MODULES))))
 MODULE_C = $(addprefix build/,$(addsuffix .c,$(MODULES)))
 MODULE_H = $(addprefix build/,$(addsuffix .h,$(MODULES)))
@@ -26,13 +26,15 @@ RUNTIME_LIBS = "$(VOC_RUNTIME)" -lm -ldl
 
 all: build/oberon-fuse build/oberon-image
 
-check: all build/FuseProbe build/DiskTimeProbe build/WriteProbe build/FailIO.so
+check: all build/FuseProbe build/DiskTimeProbe build/WriteProbe build/ReadCacheProbe build/CacheIOProbe build/FailIO.so
 	./build/FuseProbe
 	./build/DiskTimeProbe
+	./build/ReadCacheProbe
 	$(PYTHON) tests/test_images.py
 	$(PYTHON) tests/test_repair.py
 	$(PYTHON) tests/test_inplace.py
 	$(PYTHON) tests/test_writes.py
+	$(PYTHON) tests/test_cache.py
 
 check-images: all
 	$(PYTHON) tests/test_images.py --real
@@ -42,6 +44,7 @@ check-images: all
 check-mount: all
 	$(PYTHON) tests/test_mount.py
 	$(PYTHON) tests/test_write_mount.py
+	$(PYTHON) tests/test_cache_mount.py
 
 check-devices: all
 	$(PYTHON) tests/test_devices.py
@@ -81,6 +84,12 @@ build/DiskTimeProbe.c: tests/DiskTimeProbe.Mod $(MODULE_SYM) Makefile | build ch
 build/WriteProbe.c: tests/WriteProbe.Mod $(MODULE_SYM) Makefile | build check-deps
 	cd build && "$(VOC_BIN)" -OC -rmS ../tests/WriteProbe.Mod
 
+build/ReadCacheProbe.c: tests/ReadCacheProbe.Mod $(MODULE_SYM) Makefile | build check-deps
+	cd build && "$(VOC_BIN)" -OC -rmS ../tests/ReadCacheProbe.Mod
+
+build/CacheIOProbe.c: tests/CacheIOProbe.Mod $(MODULE_SYM) Makefile | build check-deps
+	cd build && "$(VOC_BIN)" -OC -rmS ../tests/CacheIOProbe.Mod
+
 build/FailIO.so: tests/FailIO.c Makefile | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) -fPIC -shared $< -ldl -o $@
 
@@ -88,6 +97,12 @@ build/DiskTimeProbe: build/DiskTimeProbe.o $(CORE_OBJECTS) build/HostBridge.o Ma
 	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
 
 build/WriteProbe: build/WriteProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
+
+build/ReadCacheProbe: build/ReadCacheProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
+
+build/CacheIOProbe: build/CacheIOProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
 	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
 
 build/Host.o: HostBridge.h
@@ -117,3 +132,4 @@ clean:
 	rm -f build/Fuse.c build/ImageTool.c build/Fuse.o build/ImageTool.o build/HostBridge.o build/FuseBridge.o
 	rm -f build/oberon-fuse build/oberon-image build/FuseProbe build/FuseProbe.c build/FuseProbe.o build/FuseProbeBridge.o
 	rm -f build/DiskTimeProbe build/DiskTimeProbe.c build/DiskTimeProbe.o build/WriteProbe build/WriteProbe.c build/WriteProbe.o build/FailIO.so
+	rm -f build/ReadCacheProbe build/ReadCacheProbe.c build/ReadCacheProbe.o build/CacheIOProbe build/CacheIOProbe.c build/CacheIOProbe.o

@@ -1,5 +1,5 @@
 MODULE CommandLine;
-  IMPORT Modules, Formats, DiskBytes;
+  IMPORT Modules, Formats, DiskBytes, ReadCache;
 
   PROCEDURE Profile*(first: INTEGER; VAR kind: INTEGER; VAR root: LONGINT): BOOLEAN;
     VAR text: ARRAY 1024 OF CHAR;
@@ -45,11 +45,11 @@ MODULE CommandLine;
   END InspectOptions;
 
   PROCEDURE MountOptions*(first: INTEGER; VAR kind: INTEGER; VAR root: LONGINT;
-                         VAR salvage, writable, device: BOOLEAN; VAR offset: INTEGER): BOOLEAN;
+                         VAR salvage, writable, device: BOOLEAN; VAR offset, cacheMiB: INTEGER): BOOLEAN;
     VAR text: ARRAY 1024 OF CHAR; number: LONGINT; sign, i: INTEGER;
       seen: SET;
   BEGIN
-    salvage := FALSE; writable := FALSE; device := FALSE; offset := 0; seen := {};
+    salvage := FALSE; writable := FALSE; device := FALSE; offset := 0; cacheMiB := 0; seen := {};
     WHILE Modules.ArgCount > first DO
       Modules.GetArg(first, text);
       IF text = "--salvage" THEN i := 0; salvage := TRUE
@@ -65,6 +65,11 @@ MODULE CommandLine;
         END;
         IF ~DiskBytes.Number(text, number) OR (number > 1440) THEN RETURN FALSE END;
         offset := sign*SHORT(number)
+      ELSIF text = "--cache-mib" THEN
+        i := 4; INC(first); IF Modules.ArgCount <= first THEN RETURN FALSE END;
+        Modules.GetArg(first, text);
+        IF ~DiskBytes.Number(text, number) OR (number > ReadCache.MaxMiB) THEN RETURN FALSE END;
+        cacheMiB := SHORT(number)
       ELSE
         IF (text[0] = "-") OR (salvage & writable) THEN RETURN FALSE END;
         RETURN Profile(first, kind, root)

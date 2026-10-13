@@ -15,7 +15,7 @@ MODULE OberonBTree;
     VAR offset: LONGINT;
   BEGIN
     IF ~Offset(v, key, offset) THEN RETURN -5 END;
-    RETURN BlockIO.Read(v.image, offset, b, v.blockSize)
+    RETURN BlockIO.ReadBlock(v.image, offset, b, v.blockSize)
   END GetBlock;
 
   PROCEDURE Header(VAR v: DiskTypes.Volume; e: DiskTypes.Entry): INTEGER;
