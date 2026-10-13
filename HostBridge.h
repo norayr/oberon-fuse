@@ -5,6 +5,10 @@
 
 int32_t OberonHost_Open(const char *path);
 int32_t OberonHost_OpenUpdate(const char *path);
+int32_t OberonHost_OpenDevice(const char *path, int32_t writable);
+int32_t OberonHost_Scratch(void);
+int32_t OberonHost_Resize(int32_t fd, int64_t size);
+int64_t OberonHost_Now(void);
 int32_t OberonHost_Create(const char *path, int64_t size);
 int64_t OberonHost_Size(int32_t fd);
 int32_t OberonHost_Read(int32_t fd, int64_t offset, void *data, int32_t count);

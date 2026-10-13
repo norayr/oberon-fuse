@@ -1,7 +1,7 @@
 MODULE FSRepair;
   (* Quarantine, never guess. Explicit in-place repair is for disposable copies. *)
-  IMPORT DiskTypes, DiskBytes, BlockIO, FileSystem, FSCheck, BTreeRebuild,
-    FSReports, ReportWriter, OberonBTree;
+  IMPORT DiskTypes, BlockIO, FileSystem, FSCheck, BTreeRebuild,
+    FSReports, ReportWriter, AllocationCache;
 
   PROCEDURE Copy(VAR source, output: BlockIO.Image): INTEGER;
     VAR b: ARRAY 65536 OF CHAR; offset: LONGINT; n, res: INTEGER;
@@ -31,21 +31,6 @@ MODULE FSRepair;
     RETURN TRUE
   END ReportPath;
 
-  PROCEDURE InvalidateMap(VAR v: DiskTypes.Volume): INTEGER;
-    VAR b: DiskTypes.Buffer; key, offset: LONGINT; res: INTEGER;
-  BEGIN
-    IF (v.kind = DiskTypes.Project) OR (v.kind = DiskTypes.Ceres) OR v.lastClaimed THEN RETURN 0 END;
-    key := (v.limit-v.root) DIV v.blockSize*29;
-    res := OberonBTree.GetBlock(v, key, b); IF res # 0 THEN RETURN res END;
-    (* Invalidate only a recognized allocation-cache marker in an unclaimed block. *)
-    IF (b[0] = 7FX) & (b[1] = 97X) & (b[2] = 2FX) & (b[3] = 9CX) THEN
-      DiskBytes.Put32(b, 0, 0);
-      IF ~OberonBTree.Offset(v, key, offset) THEN RETURN -5 END;
-      RETURN BlockIO.Write(v.image, offset, b, 4)
-    END;
-    RETURN 0
-  END InvalidateMap;
-
   PROCEDURE Apply(sourcePath, outputPath: ARRAY OF CHAR; kind: INTEGER; root: LONGINT;
                   inPlace: BOOLEAN; VAR work: DiskTypes.Volume): INTEGER;
     VAR plan: DiskTypes.Volume; report: ReportWriter.Writer;
@@ -64,7 +49,7 @@ MODULE FSRepair;
     IF res = 0 THEN res := BlockIO.Sync(report.image) END;
     IF (res = 0) & (kept # plan.count) THEN
       res := BTreeRebuild.Rebuild(work);
-      IF res = 0 THEN res := InvalidateMap(plan) END
+      IF res = 0 THEN res := AllocationCache.Invalidate(plan) END
     END;
     IF res = 0 THEN
       res := FileSystem.Scan(work, kind, root, FALSE);

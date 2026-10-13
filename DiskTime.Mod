@@ -47,6 +47,8 @@ MODULE DiskTime;
     VAR year, month, day, hour, minute, second: LONGINT; valid: BOOLEAN;
   BEGIN
     value := 0;
+    IF (kind < DiskTypes.Project) OR (kind > DiskTypes.Aos2) OR (date < 0) OR
+       (date > 4294967295) OR (time < 0) OR (offset < -1440) OR (offset > 1440) THEN RETURN FALSE END;
     IF kind = DiskTypes.Project THEN
       year := 2000+date DIV 67108864; month := date DIV 4194304 MOD 16;
       day := date DIV 131072 MOD 32; time := date MOD 131072;
@@ -65,6 +67,7 @@ MODULE DiskTime;
     VAR year, month, day, hour, minute, second: LONGINT;
   BEGIN
     date := 0; time := 0;
+    IF (kind < DiskTypes.Project) OR (kind > DiskTypes.Aos2) OR (offset < -1440) OR (offset > 1440) THEN RETURN FALSE END;
     IF (value < -2208988800-86400) OR (value > 253402300799+86400) THEN RETURN FALSE END;
     IF ~Fields(value+LONG(offset)*60, year, month, day, hour, minute, second) THEN RETURN FALSE END;
     time := hour*4096+minute*64+second;

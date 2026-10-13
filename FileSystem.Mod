@@ -1,10 +1,12 @@
 MODULE FileSystem;
-  IMPORT BlockIO, DiskTypes, DetectFS, OberonBTree, FSCheck, Diagnostics;
+  IMPORT BlockIO, DiskTypes, DiskTime, DetectFS, OberonBTree, FSCheck, Diagnostics, FSWrite;
 
   PROCEDURE Scan*(VAR v: DiskTypes.Volume; kind: INTEGER; root: LONGINT; tolerant: BOOLEAN): INTEGER;
     VAR res: INTEGER;
   BEGIN
     v.salvage := FALSE; v.treeValid := FALSE; v.checkComplete := FALSE; v.utcOffset := 0;
+    v.writable := FALSE; v.failed := FALSE;
+    v.first := NIL; v.last := NIL; v.pages := NIL; v.count := 0; v.usableCount := 0;
     Diagnostics.Clear(v);
     v.error := "locating filesystem (try an explicit format and root offset)";
     res := DetectFS.Locate(v, kind, root);
@@ -21,6 +23,16 @@ MODULE FileSystem;
     IF res # 0 THEN ignored := BlockIO.Close(v.image) END;
     RETURN res
   END OpenReport;
+
+  PROCEDURE OpenDeviceReport*(path: ARRAY OF CHAR; kind: INTEGER; root: LONGINT; VAR v: DiskTypes.Volume): INTEGER;
+    VAR res, ignored: INTEGER;
+  BEGIN
+    v.error := "opening block device for inspection"; Diagnostics.Clear(v);
+    res := BlockIO.OpenDevice(path, FALSE, v.image); IF res # 0 THEN RETURN res END;
+    res := Scan(v, kind, root, TRUE);
+    IF res # 0 THEN ignored := BlockIO.Close(v.image) END;
+    RETURN res
+  END OpenDeviceReport;
 
   PROCEDURE OpenUpdate*(path: ARRAY OF CHAR; kind: INTEGER; root: LONGINT; VAR v: DiskTypes.Volume): INTEGER;
     VAR res, ignored: INTEGER;
@@ -53,6 +65,31 @@ MODULE FileSystem;
     RETURN res
   END Open;
 
+  PROCEDURE OpenMount*(path: ARRAY OF CHAR; kind: INTEGER; root: LONGINT;
+                       device, writable, salvage: BOOLEAN; offset: INTEGER;
+                       VAR v: DiskTypes.Volume): INTEGER;
+    VAR res, ignored: INTEGER; e: DiskTypes.Entry;
+  BEGIN
+    v.error := "opening volume"; Diagnostics.Clear(v);
+    IF (offset < -1440) OR (offset > 1440) OR (writable & salvage) THEN RETURN -22 END;
+    IF device THEN res := BlockIO.OpenDevice(path, writable, v.image)
+    ELSIF writable THEN res := BlockIO.OpenUpdate(path, v.image)
+    ELSE res := BlockIO.Open(path, v.image) END;
+    IF res # 0 THEN RETURN res END;
+    res := Scan(v, kind, root, salvage);
+    v.utcOffset := offset; e := v.first;
+    WHILE e # NIL DO
+      e.timeValid := DiskTime.Decode(v.kind, e.date, e.time, offset, e.modified);
+      e.diskModified := e.modified; e := e.next
+    END;
+    IF (res = 0) & writable THEN v.error := "checking writable volume"; res := FSWrite.Init(v)
+    ELSIF (res = 0) & salvage THEN
+      res := FSCheck.Check(v); IF v.checkComplete THEN v.salvage := TRUE; res := 0 END
+    END;
+    IF res # 0 THEN ignored := BlockIO.Close(v.image) END;
+    RETURN res
+  END OpenMount;
+
   PROCEDURE Find*(VAR v: DiskTypes.Volume; name: ARRAY OF CHAR): DiskTypes.Entry;
     VAR e: DiskTypes.Entry;
   BEGIN
@@ -80,12 +117,18 @@ MODULE FileSystem;
     IF e = NIL THEN RETURN -2 END;
     IF (e.headerIssue # 0) OR (v.salvage & ~e.usable) THEN RETURN -5 END;
     COPY(e.name, v.error);
-    RETURN OberonBTree.Read(v, e, offset, data, count)
+    RETURN FSWrite.Read(v, e, offset, data, count)
   END Read;
 
   PROCEDURE Close*(VAR v: DiskTypes.Volume): INTEGER;
+    VAR e: DiskTypes.Entry; res, closed: INTEGER;
   BEGIN
+    res := 0;
+    IF v.writable THEN res := FSWrite.Sync(v) END;
+    e := v.first;
+    WHILE e # NIL DO closed := FSWrite.DiscardStage(v, e); IF res = 0 THEN res := closed END; e := e.next END;
     v.first := NIL; v.last := NIL; v.pages := NIL;
-    RETURN BlockIO.Close(v.image)
+    closed := BlockIO.Close(v.image); IF res = 0 THEN res := closed END;
+    RETURN res
   END Close;
 END FileSystem.

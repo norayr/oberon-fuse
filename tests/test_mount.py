@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @contextmanager
-def mounted(image, *options):
+def mounted(image, *options, env=None, expected_exit=0):
     unmount = shutil.which("fusermount3")
     if not unmount:
         raise unittest.SkipTest("fusermount3 not installed")
@@ -34,7 +34,8 @@ def mounted(image, *options):
     directory = Path(tempfile.mkdtemp(prefix="mount-", dir=ROOT / "build"))
     mountpoint = directory / "mnt"
     mountpoint.mkdir()
-    process = subprocess.Popen([str(ROOT / "build/oberon-fuse"), str(image), str(mountpoint), *map(str, options)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen([str(ROOT / "build/oberon-fuse"), str(image), str(mountpoint), *map(str, options)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    completed = False
     try:
         deadline = time.monotonic() + 10
         while not os.path.ismount(mountpoint) and process.poll() is None and time.monotonic() < deadline:
@@ -47,19 +48,28 @@ def mounted(image, *options):
                 raise unittest.SkipTest(error.decode().strip())
             raise AssertionError(f"mount failed: {error.decode()}")
         yield mountpoint
+        completed = True
     finally:
         try:
-            if os.path.ismount(mountpoint):
-                subprocess.run([unmount, "-u", str(mountpoint)], check=True, timeout=10)
+            # A disconnected FUSE mount can make ismount return False.
+            result = subprocess.run([unmount, "-u", str(mountpoint)], capture_output=True, timeout=10)
+            if result.returncode and os.path.ismount(mountpoint):
+                raise RuntimeError(result.stderr.decode())
         finally:
-            if process.poll() is None:
+            try:
+                output, error = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
                 process.terminate()
-            process.communicate(timeout=10)
+                output, error = process.communicate(timeout=10)
+            if process.returncode and process.returncode != expected_exit:
+                print(f"FUSE exited {process.returncode}: {output.decode().strip()} {error.decode().strip()}")
         # Never recursively clean a directory that is still mounted.
         if os.path.ismount(mountpoint):
             raise RuntimeError(f"test mount remains active: {mountpoint}")
         mountpoint.rmdir()
         directory.rmdir()
+        if completed and expected_exit is not None and process.returncode != expected_exit:
+            raise AssertionError(f"FUSE exit {process.returncode}, expected {expected_exit}: {output!r} {error!r}")
 
 
 class Mount(unittest.TestCase):

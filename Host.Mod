@@ -5,6 +5,10 @@ MODULE Host;
   PROCEDURE -Include '#include "HostBridge.h"';
   PROCEDURE -Open0(path: SYSTEM.ADDRESS): SYSTEM.INT32 'OberonHost_Open((const char *)path)';
   PROCEDURE -Update0(path: SYSTEM.ADDRESS): SYSTEM.INT32 'OberonHost_OpenUpdate((const char *)path)';
+  PROCEDURE -Device0(path: SYSTEM.ADDRESS; writable: SYSTEM.INT32): SYSTEM.INT32 'OberonHost_OpenDevice((const char *)path, writable)';
+  PROCEDURE -Scratch0(): SYSTEM.INT32 'OberonHost_Scratch()';
+  PROCEDURE -Resize0(fd: SYSTEM.INT32; size: SYSTEM.INT64): SYSTEM.INT32 'OberonHost_Resize(fd, size)';
+  PROCEDURE -Now0(): SYSTEM.INT64 'OberonHost_Now()';
   PROCEDURE -Create0(path: SYSTEM.ADDRESS; size: SYSTEM.INT64): SYSTEM.INT32 'OberonHost_Create((const char *)path, size)';
   PROCEDURE -Size0(fd: SYSTEM.INT32): SYSTEM.INT64 'OberonHost_Size(fd)';
   PROCEDURE -Read0(fd: SYSTEM.INT32; offset: SYSTEM.INT64; data: SYSTEM.ADDRESS; count: SYSTEM.INT32): SYSTEM.INT32 'OberonHost_Read(fd, offset, (void *)data, count)';
@@ -22,6 +26,19 @@ MODULE Host;
 
   PROCEDURE OpenUpdate*(path: ARRAY OF CHAR): LONGINT;
   BEGIN RETURN Update0(SYSTEM.ADR(path)) END OpenUpdate;
+
+  PROCEDURE OpenDevice*(path: ARRAY OF CHAR; writable: BOOLEAN): LONGINT;
+    VAR flag: INTEGER;
+  BEGIN IF writable THEN flag := 1 ELSE flag := 0 END; RETURN Device0(SYSTEM.ADR(path), flag) END OpenDevice;
+
+  PROCEDURE Scratch*(): LONGINT;
+  BEGIN RETURN Scratch0() END Scratch;
+
+  PROCEDURE Resize*(fd, size: LONGINT): INTEGER;
+  BEGIN RETURN SHORT(Resize0(SHORT(fd), size)) END Resize;
+
+  PROCEDURE Now*(): LONGINT;
+  BEGIN RETURN Now0() END Now;
 
   PROCEDURE Create*(path: ARRAY OF CHAR; size: LONGINT): LONGINT;
   BEGIN RETURN Create0(SYSTEM.ADR(path), size) END Create;

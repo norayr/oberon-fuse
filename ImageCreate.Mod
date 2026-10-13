@@ -1,6 +1,6 @@
 MODULE ImageCreate;
   (* Empty filesystems, either new files or explicitly selected working images. *)
-  IMPORT BlockIO, DiskTypes, DiskBytes, Formats, FileSystem, FSCheck;
+  IMPORT Host, BlockIO, DiskTypes, DiskBytes, Formats, FileSystem, FSCheck;
 
   PROCEDURE Boot(VAR v: DiskTypes.Volume; start, size: LONGINT): INTEGER;
     VAR b: DiskTypes.Buffer; i: INTEGER; sectors: LONGINT;
@@ -102,6 +102,20 @@ MODULE ImageCreate;
     IF res = 0 THEN res := closed END;
     RETURN res
   END FormatExisting;
+
+  PROCEDURE FormatDevice*(path, container: ARRAY OF CHAR; kind: INTEGER): INTEGER;
+    VAR v: DiskTypes.Volume; start: LONGINT; res, closed: INTEGER;
+  BEGIN
+    res := BlockIO.OpenDevice(path, TRUE, v.image); IF res # 0 THEN RETURN res END;
+    res := Layout(container, kind, v.image.size, v, start);
+    IF res = 0 THEN
+      Host.Error("erasing the entire selected block device (including old partitions):"); Host.Error(path);
+      res := Clear(v.image)
+    END;
+    IF res = 0 THEN res := Write(v, container, start) END;
+    closed := BlockIO.Close(v.image); IF res = 0 THEN res := closed END;
+    RETURN res
+  END FormatDevice;
 
   PROCEDURE Create*(path, container: ARRAY OF CHAR; kind: INTEGER; size: LONGINT): INTEGER;
     VAR v: DiskTypes.Volume; start: LONGINT; res, closed: INTEGER;

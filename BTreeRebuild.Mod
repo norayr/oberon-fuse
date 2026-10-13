@@ -1,5 +1,5 @@
 MODULE BTreeRebuild;
-  (* Rebuild from verified entries, reusing only known directory pages. *)
+  (* Rebuild verified entries using a caller-selected directory-page pool. *)
   IMPORT DiskTypes, DiskBytes, BlockIO, OberonBTree;
   TYPE Bounds = ARRAY 33 OF LONGINT;
 
@@ -55,6 +55,13 @@ MODULE BTreeRebuild;
     RETURN total
   END Needed;
 
+  PROCEDURE PageCount*(VAR v: DiskTypes.Volume; count: INTEGER): INTEGER;
+    VAR minimum, maximum: Bounds; height: INTEGER;
+  BEGIN
+    height := Limits(v, count, minimum, maximum); IF height < 0 THEN RETURN -1 END;
+    RETURN Needed(v, count, height, TRUE, minimum, maximum)
+  END PageCount;
+
   PROCEDURE CanBuild*(VAR v: DiskTypes.Volume): BOOLEAN;
     VAR minimum, maximum: Bounds; p: DiskTypes.Page; height, available, needed: INTEGER;
   BEGIN
@@ -105,6 +112,8 @@ MODULE BTreeRebuild;
       END
     END;
     IF ~OberonBTree.Offset(v, key, offset) THEN RETURN -5 END;
+    (* Publish the fixed root only after its children have reached the host. *)
+    IF root THEN res := BlockIO.Sync(v.image); IF res # 0 THEN RETURN res END END;
     RETURN BlockIO.Write(v.image, offset, b, v.blockSize)
   END Build;
 

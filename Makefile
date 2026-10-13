@@ -14,23 +14,25 @@ FUSE_LIBS = $(shell $(PKG_CONFIG) --libs fuse3)
 PROJECT_CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -D_FILE_OFFSET_BITS=64 -I. -Itests -I"$(VOC_HOME)/C/include"
 PROJECT_CFLAGS = -std=c11 -Wall -Wextra
 VOC_FLAGS = -OC -rsS
-MODULES = Host BlockIO DiskBytes DiskTypes DiskTime ProjectFS NatFS CeresFS AosFS Formats BlockSet Diagnostics AllocationMap OberonBTree DetectFS FSCheck FileSystem ReportWriter FSReports BTreeRebuild FSRepair ImageCreate CommandLine FuseABI
+MODULES = Host BlockIO DiskBytes WriteBitmap DiskTypes DiskTime ProjectFS NatFS CeresFS AosFS Formats BlockSet Diagnostics AllocationMap OberonBTree AllocationCache DetectFS FSCheck BTreeRebuild FSWrite FileSystem ReportWriter FSReports FSRepair ImageCreate CommandLine FuseABI
 CORE_OBJECTS = $(addprefix build/,$(addsuffix .o,$(filter-out FuseABI,$(MODULES))))
 MODULE_C = $(addprefix build/,$(addsuffix .c,$(MODULES)))
 MODULE_H = $(addprefix build/,$(addsuffix .h,$(MODULES)))
 MODULE_SYM = $(addprefix build/,$(addsuffix .sym,$(MODULES)))
 RUNTIME_LIBS = "$(VOC_RUNTIME)" -lm -ldl
 
-.PHONY: all check check-images check-mount check-deps clean
+.PHONY: all check check-images check-mount check-devices check-deps clean
 .DELETE_ON_ERROR:
 
 all: build/oberon-fuse build/oberon-image
 
-check: all build/FuseProbe
+check: all build/FuseProbe build/DiskTimeProbe build/WriteProbe build/FailIO.so
 	./build/FuseProbe
+	./build/DiskTimeProbe
 	$(PYTHON) tests/test_images.py
 	$(PYTHON) tests/test_repair.py
 	$(PYTHON) tests/test_inplace.py
+	$(PYTHON) tests/test_writes.py
 
 check-images: all
 	$(PYTHON) tests/test_images.py --real
@@ -39,6 +41,10 @@ check-images: all
 
 check-mount: all
 	$(PYTHON) tests/test_mount.py
+	$(PYTHON) tests/test_write_mount.py
+
+check-devices: all
+	$(PYTHON) tests/test_devices.py
 
 check-deps:
 	@command -v "$(VOC)" >/dev/null || { echo "VOC not found; set VOC to its executable path." >&2; exit 1; }
@@ -69,6 +75,21 @@ build/ImageTool.c: ImageTool.Mod $(MODULE_SYM) Makefile | build check-deps
 build/FuseProbe.c: tests/FuseProbe.Mod Makefile | build check-deps
 	cd build && "$(VOC_BIN)" -OC -rmS ../tests/FuseProbe.Mod
 
+build/DiskTimeProbe.c: tests/DiskTimeProbe.Mod $(MODULE_SYM) Makefile | build check-deps
+	cd build && "$(VOC_BIN)" -OC -rmS ../tests/DiskTimeProbe.Mod
+
+build/WriteProbe.c: tests/WriteProbe.Mod $(MODULE_SYM) Makefile | build check-deps
+	cd build && "$(VOC_BIN)" -OC -rmS ../tests/WriteProbe.Mod
+
+build/FailIO.so: tests/FailIO.c Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) -fPIC -shared $< -ldl -o $@
+
+build/DiskTimeProbe: build/DiskTimeProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
+
+build/WriteProbe: build/WriteProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
+
 build/Host.o: HostBridge.h
 build/FuseABI.o: FuseBridge.h
 build/FuseProbe.o: tests/FuseProbeBridge.h
@@ -95,3 +116,4 @@ clean:
 	rm -f $(MODULE_C) $(MODULE_H) $(MODULE_SYM) $(addprefix build/,$(addsuffix .o,$(MODULES)))
 	rm -f build/Fuse.c build/ImageTool.c build/Fuse.o build/ImageTool.o build/HostBridge.o build/FuseBridge.o
 	rm -f build/oberon-fuse build/oberon-image build/FuseProbe build/FuseProbe.c build/FuseProbe.o build/FuseProbeBridge.o
+	rm -f build/DiskTimeProbe build/DiskTimeProbe.c build/DiskTimeProbe.o build/WriteProbe build/WriteProbe.c build/WriteProbe.o build/FailIO.so

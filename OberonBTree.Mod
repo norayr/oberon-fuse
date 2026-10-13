@@ -39,6 +39,7 @@ MODULE OberonBTree;
     IF e.size < 0 THEN e.size := 0; RETURN Diagnostics.LengthShort END;
     (* aleng names the final allocated block, even when bleng is zero. *)
     e.blocks := a+1;
+    e.diskSize := e.size; e.diskModified := e.modified;
     FOR i := 0 TO v.directCount-1 DO e.direct[i] := DiskBytes.U32(b, v.directOffset+i*4) END;
     IF e.direct[0] # e.key THEN RETURN Diagnostics.FirstBlock END;
     IF v.doubleIndirect THEN e.extension := DiskBytes.U32(b, v.indexOffset)

@@ -10,11 +10,13 @@ MODULE ImageTool;
     Host.Error("       oberon-image create FORMAT hdd|floppy|raw OUTPUT [SIZE-MiB]");
     Host.Error("       oberon-image mkfs FORMAT OUTPUT SIZE-MiB");
     Host.Error("       oberon-image mkfs FORMAT IMAGE --in-place [raw|hdd|floppy]");
+    Host.Error("       oberon-image mkfs FORMAT DEVICE --erase-device [raw|hdd|floppy]");
     Host.Error("       oberon-image repair-plan IMAGE [FORMAT [ROOT-OFFSET]]");
     Host.Error("       oberon-image repair IMAGE NEW-IMAGE --drop-invalid [FORMAT [ROOT-OFFSET]]");
     Host.Error("       oberon-image repair IMAGE --in-place --drop-invalid [FORMAT [ROOT-OFFSET]]");
     Host.Error("--in-place modifies an existing regular file: use only an unmounted working copy");
     Host.Error("inspection also accepts --salvage before FORMAT; check scans all files in a valid tree");
+    Host.Error("inspection accepts --device; --erase-device destroys the entire selected block device");
     Host.Error("formats: project, natfs, ceres, aos1, aos2; inspection defaults to auto");
     Host.Exit(2)
   END Usage;
@@ -24,12 +26,12 @@ MODULE ImageTool;
       reportPath: ARRAY 2048 OF CHAR; w: ReportWriter.Writer;
       v: DiskTypes.Volume; e: DiskTypes.Entry; b: DiskTypes.Buffer;
       kind, first, res, closed, n, printed: INTEGER; size, root, pos, remaining: LONGINT;
-      salvage, inPlace: BOOLEAN;
+       salvage, inPlace, device: BOOLEAN;
   BEGIN
     IF Modules.ArgCount < 3 THEN Usage END;
     Modules.GetArg(1, command);
     IF (command = "create") OR (command = "mkfs") THEN
-      inPlace := FALSE;
+      inPlace := FALSE; device := FALSE;
       IF command = "create" THEN
         IF (Modules.ArgCount < 5) OR (Modules.ArgCount > 6) THEN Usage END;
         Modules.GetArg(2, text); kind := Formats.Kind(text);
@@ -44,8 +46,9 @@ MODULE ImageTool;
         IF (Modules.ArgCount < 5) OR (Modules.ArgCount > 6) THEN Usage END;
         Modules.GetArg(2, text); kind := Formats.Kind(text); container := "raw";
         Modules.GetArg(3, path); Modules.GetArg(4, text);
-        IF text = "--in-place" THEN
+        IF (text = "--in-place") OR (text = "--erase-device") THEN
           inPlace := TRUE;
+          device := text = "--erase-device";
           IF Modules.ArgCount = 6 THEN Modules.GetArg(5, container) END
         ELSE
           IF Modules.ArgCount # 5 THEN Usage END;
@@ -54,10 +57,12 @@ MODULE ImageTool;
         END
       END;
       IF kind <= 0 THEN Usage END;
-      IF inPlace THEN res := ImageCreate.FormatExisting(path, container, kind)
+      IF device THEN res := ImageCreate.FormatDevice(path, container, kind)
+      ELSIF inPlace THEN res := ImageCreate.FormatExisting(path, container, kind)
       ELSE res := ImageCreate.Create(path, container, kind, size) END;
       IF res # 0 THEN
-        IF inPlace THEN Host.Report("formatting existing working image", res)
+        IF device THEN Host.Report("formatting selected block device", res)
+        ELSIF inPlace THEN Host.Report("formatting existing working image", res)
         ELSE Host.Report("creating image", res) END;
         Host.Exit(1)
       END;
@@ -85,9 +90,12 @@ MODULE ImageTool;
       IF inPlace THEN COPY(path, output) END;
       first := 5
     END;
-    IF ~CommandLine.Options(first, kind, root, salvage) THEN Usage END;
+    IF ~CommandLine.InspectOptions(first, kind, root, salvage, device) THEN Usage END;
     IF salvage & ((command = "check") OR (command = "repair-plan") OR (command = "repair")) THEN Usage END;
-    IF inPlace THEN res := FileSystem.OpenUpdate(path, kind, root, v)
+    IF device & ((command = "repair") OR (command = "repair-plan")) THEN Usage END;
+    IF device & (command = "check") THEN res := FileSystem.OpenDeviceReport(path, kind, root, v)
+    ELSIF device THEN res := FileSystem.OpenMount(path, kind, root, TRUE, FALSE, salvage, 0, v)
+    ELSIF inPlace THEN res := FileSystem.OpenUpdate(path, kind, root, v)
     ELSIF (command = "check") OR (command = "repair-plan") OR (command = "repair") THEN
       res := FileSystem.OpenReport(path, kind, root, v)
     ELSIF salvage THEN res := FileSystem.OpenSalvage(path, kind, root, v)

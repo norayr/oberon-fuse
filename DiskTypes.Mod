@@ -1,5 +1,5 @@
 MODULE DiskTypes;
-  IMPORT BlockIO;
+  IMPORT BlockIO, WriteBitmap;
   CONST
     Project* = 1; Native* = 2; Ceres* = 3; Aos1* = 4; Aos2* = 5;
   TYPE
@@ -15,6 +15,10 @@ MODULE DiskTypes;
       aleng*, bleng*: LONGINT;
       date*, time*, modified*: LONGINT;
       timeValid*: BOOLEAN;
+      diskSize*, diskModified*: LONGINT;
+      stage*: BlockIO.Image;
+      staged*, dirty*, deleted*: BOOLEAN;
+      opens*: INTEGER;
       headerIssue*, dataIssue*: INTEGER;
       usable*: BOOLEAN;
       direct*: ARRAY 128 OF LONGINT;
@@ -41,6 +45,8 @@ MODULE DiskTypes;
       issues*, lastIssue*: Issue;
       treeValid*, checkComplete*, lastClaimed*, salvage*: BOOLEAN;
       utcOffset*: INTEGER;
+      writable*, failed*: BOOLEAN;
+      allocation*: WriteBitmap.Map;
       error*: ARRAY 160 OF CHAR
     END;
 

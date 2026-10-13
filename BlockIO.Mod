@@ -7,11 +7,12 @@ MODULE BlockIO;
     writable: BOOLEAN
   END;
 
-  PROCEDURE OpenImage(path: ARRAY OF CHAR; writable: BOOLEAN; VAR image: Image): INTEGER;
+  PROCEDURE OpenImage(path: ARRAY OF CHAR; writable, device: BOOLEAN; VAR image: Image): INTEGER;
     VAR res, ignored: INTEGER;
   BEGIN
     image.writable := writable; image.size := 0;
-    IF writable THEN image.fd := Host.OpenUpdate(path) ELSE image.fd := Host.Open(path) END;
+    IF device THEN image.fd := Host.OpenDevice(path, writable)
+    ELSIF writable THEN image.fd := Host.OpenUpdate(path) ELSE image.fd := Host.Open(path) END;
     IF image.fd < 0 THEN RETURN SHORT(image.fd) END;
     image.size := Host.Size(image.fd);
     IF image.size < 0 THEN
@@ -22,10 +23,28 @@ MODULE BlockIO;
   END OpenImage;
 
   PROCEDURE Open*(path: ARRAY OF CHAR; VAR image: Image): INTEGER;
-  BEGIN RETURN OpenImage(path, FALSE, image) END Open;
+  BEGIN RETURN OpenImage(path, FALSE, FALSE, image) END Open;
 
   PROCEDURE OpenUpdate*(path: ARRAY OF CHAR; VAR image: Image): INTEGER;
-  BEGIN RETURN OpenImage(path, TRUE, image) END OpenUpdate;
+  BEGIN RETURN OpenImage(path, TRUE, FALSE, image) END OpenUpdate;
+
+  PROCEDURE OpenDevice*(path: ARRAY OF CHAR; writable: BOOLEAN; VAR image: Image): INTEGER;
+  BEGIN RETURN OpenImage(path, writable, TRUE, image) END OpenDevice;
+
+  PROCEDURE Scratch*(VAR image: Image): INTEGER;
+  BEGIN
+    image.fd := Host.Scratch(); image.writable := TRUE; image.size := 0;
+    IF image.fd < 0 THEN RETURN SHORT(image.fd) END;
+    RETURN 0
+  END Scratch;
+
+  PROCEDURE Resize*(VAR image: Image; size: LONGINT): INTEGER;
+    VAR res: INTEGER;
+  BEGIN
+    IF ~image.writable THEN RETURN -30 END;
+    res := Host.Resize(image.fd, size); IF res = 0 THEN image.size := size END;
+    RETURN res
+  END Resize;
 
   PROCEDURE Create*(path: ARRAY OF CHAR; size: LONGINT; VAR image: Image): INTEGER;
   BEGIN

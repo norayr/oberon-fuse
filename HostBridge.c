@@ -6,6 +6,9 @@
 #include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
+#include <time.h>
 #include <unistd.h>
 
 _Static_assert(sizeof(off_t) == 8, "64-bit file offsets required");
@@ -44,6 +47,44 @@ int32_t OberonHost_OpenUpdate(const char *path)
     return checked_open(open(path, O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC), 1);
 }
 
+int32_t OberonHost_OpenDevice(const char *path, int32_t writable)
+{
+    /* Kernel block-device exclusion also refuses a mounted/claimed device. */
+    int fd = open(path, (writable ? O_RDWR : O_RDONLY) | O_EXCL | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) return -errno;
+    struct stat st;
+    int error = 0;
+    if (fstat(fd, &st) != 0) error = errno;
+    else if (!S_ISBLK(st.st_mode)) error = EINVAL;
+    else if (flock(fd, (writable ? LOCK_EX : LOCK_SH) | LOCK_NB) != 0) error = errno;
+    if (error) { close(fd); return -error; }
+    return fd;
+}
+
+int32_t OberonHost_Scratch(void)
+{
+    const char *directory = getenv("TMPDIR");
+    if (!directory || !*directory) directory = "/tmp";
+    char path[4096];
+    int length = snprintf(path, sizeof(path), "%s/oberon-fuse-XXXXXX", directory);
+    if (length < 0 || (size_t)length >= sizeof(path)) return -ENAMETOOLONG;
+    int fd = mkstemp(path);
+    if (fd < 0) return -errno;
+    int error = 0;
+    if (unlink(path) != 0) error = errno;
+    if (!error && fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) error = errno;
+    if (error) { close(fd); return -error; }
+    return fd;
+}
+
+int32_t OberonHost_Resize(int32_t fd, int64_t size)
+{
+    if (size < 0) return -EINVAL;
+    return ftruncate(fd, (off_t)size) == 0 ? 0 : -errno;
+}
+
+int64_t OberonHost_Now(void) { return (int64_t)time(NULL); }
+
 int32_t OberonHost_Create(const char *path, int64_t size)
 {
     if (size <= 0) return -EINVAL;
@@ -63,6 +104,12 @@ int64_t OberonHost_Size(int32_t fd)
 {
     struct stat st;
     if (fstat(fd, &st) != 0) return -errno;
+    if (S_ISBLK(st.st_mode)) {
+        uint64_t size;
+        if (ioctl(fd, BLKGETSIZE64, &size) != 0) return -errno;
+        if (size > INT64_MAX) return -EOVERFLOW;
+        return (int64_t)size;
+    }
     return st.st_size;
 }
 
