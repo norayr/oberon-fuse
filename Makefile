@@ -11,7 +11,7 @@ VOC_RUNTIME ?= $(firstword $(wildcard $(VOC_PREFIX)/lib/libvoc-OC.a $(VOC_PREFIX
 
 FUSE_CFLAGS = $(shell $(PKG_CONFIG) --cflags fuse3)
 FUSE_LIBS = $(shell $(PKG_CONFIG) --libs fuse3)
-PROJECT_CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -D_FILE_OFFSET_BITS=64 -I. -Itests -I"$(VOC_HOME)/C/include"
+PROJECT_CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -D_FILE_OFFSET_BITS=64 -Itests -I"$(VOC_HOME)/C/include"
 PROJECT_CFLAGS = -std=c11 -Wall -Wextra
 VOC_FLAGS = -OC -rsS
 MODULES = Host ReadCache BlockIO DiskBytes WriteBitmap DiskTypes DiskTime ProjectFS NatFS CeresFS AosFS Formats BlockSet Diagnostics AllocationMap OberonBTree AllocationCache DetectFS FSCheck BTreeRebuild FSWrite FileSystem ReportWriter FSReports FSRepair ImageCreate CommandLine FuseABI
@@ -67,7 +67,7 @@ $(MODULE_C) $(MODULE_H) $(MODULE_SYM) &: $(addsuffix .Mod,$(MODULES)) Makefile |
 
 build/%.o: build/%.c $(MODULE_H) Makefile | check-deps
 # alloca and these warnings come from VOC/runtime macros, not handwritten C.
-	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) -include alloca.h -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-label -Wno-stringop-overflow -c $< -o $@
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(FUSE_CFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) -include alloca.h -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-label -Wno-stringop-overflow -c $< -o $@
 
 build/Fuse.c: Fuse.Mod $(MODULE_SYM) Makefile | build check-deps
 	cd build && "$(VOC_BIN)" -OC -rmS ../Fuse.Mod
@@ -93,27 +93,19 @@ build/CacheIOProbe.c: tests/CacheIOProbe.Mod $(MODULE_SYM) Makefile | build chec
 build/FailIO.so: tests/FailIO.c Makefile | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) -fPIC -shared $< -ldl -o $@
 
-build/DiskTimeProbe: build/DiskTimeProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+build/DiskTimeProbe: build/DiskTimeProbe.o $(CORE_OBJECTS) Makefile
 	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
 
-build/WriteProbe: build/WriteProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+build/WriteProbe: build/WriteProbe.o $(CORE_OBJECTS) Makefile
 	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
 
-build/ReadCacheProbe: build/ReadCacheProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+build/ReadCacheProbe: build/ReadCacheProbe.o $(CORE_OBJECTS) Makefile
 	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
 
-build/CacheIOProbe: build/CacheIOProbe.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+build/CacheIOProbe: build/CacheIOProbe.o $(CORE_OBJECTS) Makefile
 	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
 
-build/Host.o: HostBridge.h
-build/FuseABI.o: FuseBridge.h
 build/FuseProbe.o: tests/FuseProbeBridge.h
-
-build/HostBridge.o: HostBridge.c HostBridge.h Makefile | build check-deps
-	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) -c $< -o $@
-
-build/FuseBridge.o: FuseBridge.c FuseBridge.h Makefile | build check-deps
-	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(FUSE_CFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) -c $< -o $@
 
 build/FuseProbeBridge.o: tests/FuseProbeBridge.c tests/FuseProbeBridge.h Makefile | build check-deps
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(FUSE_CFLAGS) $(CFLAGS) $(PROJECT_CFLAGS) -c $< -o $@
@@ -121,15 +113,15 @@ build/FuseProbeBridge.o: tests/FuseProbeBridge.c tests/FuseProbeBridge.h Makefil
 build/FuseProbe: build/FuseProbe.o build/FuseProbeBridge.o Makefile | check-deps
 	$(CC) $(LDFLAGS) build/FuseProbe.o build/FuseProbeBridge.o $(RUNTIME_LIBS) $(FUSE_LIBS) $(LDLIBS) -o $@
 
-build/oberon-fuse: build/Fuse.o build/FuseABI.o $(CORE_OBJECTS) build/HostBridge.o build/FuseBridge.o Makefile
+build/oberon-fuse: build/Fuse.o build/FuseABI.o $(CORE_OBJECTS) Makefile
 	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(FUSE_LIBS) $(LDLIBS) -o $@
 
-build/oberon-image: build/ImageTool.o $(CORE_OBJECTS) build/HostBridge.o Makefile
+build/oberon-image: build/ImageTool.o $(CORE_OBJECTS) Makefile
 	$(CC) $(LDFLAGS) $(filter %.o,$^) $(RUNTIME_LIBS) $(LDLIBS) -o $@
 
 clean:
 	rm -f $(MODULE_C) $(MODULE_H) $(MODULE_SYM) $(addprefix build/,$(addsuffix .o,$(MODULES)))
-	rm -f build/Fuse.c build/ImageTool.c build/Fuse.o build/ImageTool.o build/HostBridge.o build/FuseBridge.o
+	rm -f build/Fuse.c build/ImageTool.c build/Fuse.o build/ImageTool.o
 	rm -f build/oberon-fuse build/oberon-image build/FuseProbe build/FuseProbe.c build/FuseProbe.o build/FuseProbeBridge.o
 	rm -f build/DiskTimeProbe build/DiskTimeProbe.c build/DiskTimeProbe.o build/WriteProbe build/WriteProbe.c build/WriteProbe.o build/FailIO.so
 	rm -f build/ReadCacheProbe build/ReadCacheProbe.c build/ReadCacheProbe.o build/CacheIOProbe build/CacheIOProbe.c build/CacheIOProbe.o
