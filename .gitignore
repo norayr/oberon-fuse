@@ -6,3 +6,4 @@
 /disks/**/*.dat
 /disks/**/*.zip
 /disks/**/*.repair.txt
+/disks/**/*.part

@@ -1,6 +1,6 @@
 # Disk images
 
-We'll provide later a script that downloads the disk images.
+Run `download.sh` to download and check the images below.
 
 Local images for development. The image files are ignored by Git; the
 preservation images have not been changed. Derived repair copies are marked as
@@ -24,6 +24,10 @@ same checks; `make check-images` reruns them together with the ZIP CRC tests.
 | `aos/A2_Rev-6498_serial-trace.iso` | 1 | 163,889,152 bytes | AosFS v2 inside El Torito/ISO9660 |
 
 ## Project Oberon 2013
+
+The image is the official SD-card raw image from
+[projectoberon.com](https://www.projectoberon.net/zip/RISCimg.zip), dated
+2018-12-11.
 
 `po13/RISC.img` has an MBR. Its second partition has type `FFH` and starts at
 512-byte sector 524,288 (256 MiB). The root directory is one 1 KB block later,
